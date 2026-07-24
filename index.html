@@ -215,11 +215,13 @@
                updated each frame via updateCellGrid(stim, curlAngle). This is now the
                ONLY visual for the root body — no separate static outline that could
                fall out of sync with the bend. -->
-          <g id="magCellGrid" clip-path="url(#capBodyClip)"></g>
-          <path id="magArrow" d="" fill="none" stroke="#f0c231" stroke-width="3.5" stroke-linecap="round" marker-end="url(#magArrowHead)"></path>
+          <g id="magMeshOrient">
+            <g id="magCellGrid" clip-path="url(#capBodyClip)"></g>
+            <path id="magArrow" d="" fill="none" stroke="#f0c231" stroke-width="3.5" stroke-linecap="round" marker-end="url(#magArrowHead)"></path>
+            <ellipse id="magRedZone" cx="0" cy="0" rx="0" ry="0" fill="url(#auxinRedZone)"></ellipse>
+            <g id="magParticles"></g>
+          </g>
           <rect id="magTint" x="-138" y="-64" width="272" height="128" fill="transparent" opacity="0"></rect>
-          <ellipse id="magRedZone" cx="0" cy="0" rx="0" ry="0" fill="url(#auxinRedZone)"></ellipse>
-          <g id="magParticles"></g>
         </g>
         <circle r="156" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="4"></circle>
         <circle r="156" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="1" transform="translate(1.2,1.2)"></circle>
@@ -262,6 +264,21 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="10.3" cy="10.3" r="6"></circle>
         <line x1="14.8" y1="14.8" x2="20" y2="20" stroke-linecap="round"></line>
+      </svg>
+    </button>
+    <button id="magScaleDownBtn" title="Shrink Magnifier">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="10.3" cy="10.3" r="6"></circle>
+        <line x1="14.8" y1="14.8" x2="20" y2="20" stroke-linecap="round"></line>
+        <line x1="7.3" y1="10.3" x2="13.3" y2="10.3" stroke-linecap="round"></line>
+      </svg>
+    </button>
+    <button id="magScaleUpBtn" title="Enlarge Magnifier">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="10.3" cy="10.3" r="6"></circle>
+        <line x1="14.8" y1="14.8" x2="20" y2="20" stroke-linecap="round"></line>
+        <line x1="7.3" y1="10.3" x2="13.3" y2="10.3" stroke-linecap="round"></line>
+        <line x1="10.3" y1="7.3" x2="10.3" y2="13.3" stroke-linecap="round"></line>
       </svg>
     </button>
     <div class="slider-row">
@@ -815,6 +832,7 @@ const MAG_ARROW_D  = "M 19 -13 Q 51 -31 70 -3";
 
 
 let magX = 150, magY = 150;
+let magScale = 1;
 let magDragging = false;
 let magAnimId = null;
 let redZoneX = 0, redZoneY = 0;
@@ -942,7 +960,7 @@ function initCellGrid() {
   }
 }
 
-function updateCellGrid(stim, curlAngle) {
+function updateCellGrid(stim, curlAngle, boostLower) {
   if (!CELL_PATHS.length) return;
 
   // 1. Build the centerline.
@@ -974,9 +992,14 @@ function updateCellGrid(stim, curlAngle) {
     let taper = 1;
     if (s > 0.5) taper = 1 - smoothstep((s - 0.5) / 0.5) * 0.85; // floors at 0.15
     const growthRamp = smoothstep(s); // same ramp driving the bend — growth causes it
+    const boost = 1 + stim * 0.9 * growthRamp;
 
-    const upperExtent = BASE_ROW_H * N_UPPER * taper * (1 + stim * 0.9 * growthRamp);
-    const lowerExtent = BASE_ROW_H * N_LOWER * taper;
+    // Root: auxin (lower) inhibits elongation, so only upper stretches.
+    // Shoot: auxin (lower) stimulates elongation, so lower stretches instead —
+    // which is also why the tip curls away from it (the longer side pushes
+    // the tip toward the shorter side), not toward it like the root.
+    const upperExtent = BASE_ROW_H * N_UPPER * taper * (boostLower ? 1 : boost);
+    const lowerExtent = BASE_ROW_H * N_LOWER * taper * (boostLower ? boost : 1);
     const upX = Math.sin(pt.rad), upY = -Math.cos(pt.rad);
     const dnX = -Math.sin(pt.rad), dnY = Math.cos(pt.rad);
 
@@ -1054,13 +1077,21 @@ function stepMagnifier(now) {
 
   // Deform the pre-allocated, bending cell mesh — zero stim on the control
   // pot so it stays straight and symmetric when untilted.
+  const isShootMatch = magOrganMatch && magOrganMatch.name === "Shoot Tip";
   const cellStim = (magOrganMatch && magOrganMatch.pot === "right")
     ? magStimIntensity * timeFactor
     : 0;
   let curlDir = 0;
-  if (magOrganMatch && magOrganMatch.pot === "right") curlDir = 1;
+  if (magOrganMatch && magOrganMatch.pot === "right") curlDir = isShootMatch ? -1 : 1;
   const curlAngle = curlDir * MAX_CURL_DEG * magStimIntensity * timeFactor;
-  updateCellGrid(cellStim, curlAngle);
+  updateCellGrid(cellStim, curlAngle, isShootMatch);
+
+  // Shoots grow upward in the main scene; rotate the mesh view to match,
+  // rather than showing the same rightward-pointing convention used for
+  // roots. Only the display orientation changes — growth math, curl
+  // direction, and the auxin story underneath are untouched.
+  const isShootView = magOrganMatch && magOrganMatch.name === "Shoot Tip";
+  document.getElementById("magMeshOrient").setAttribute("transform", isShootView ? "rotate(-90)" : "");
 
   const bioEl = document.getElementById("magBioText");
   if (magOrganMatch && magOrganMatch.pot === "right" && magStimIntensity > 0.12) {
@@ -1078,8 +1109,30 @@ function stepMagnifier(now) {
   if (state.magnifierOn) magAnimId = requestAnimationFrame(stepMagnifier);
 }
 
+function clampMagPosition() {
+  // Margin scales with the lens so it never overhangs the panel edges at
+  // any size — same margin the original hand-tuned bounds used (~176px
+  // at scale 1), just made proportional instead of fixed.
+  const margin = 176 * magScale;
+  magX = Math.max(margin, Math.min(900 - margin, magX));
+  magY = Math.max(margin, Math.min(500 - margin, magY));
+}
+
 function positionMagnifier() {
-  document.getElementById("magnifier").setAttribute("transform", `translate(${magX.toFixed(1)}, ${magY.toFixed(1)})`);
+  document.getElementById("magnifier").setAttribute(
+    "transform",
+    `translate(${magX.toFixed(1)}, ${magY.toFixed(1)}) scale(${magScale.toFixed(2)})`
+  );
+}
+
+function setMagScale(delta) {
+  // Upper bound is capped at 1.4, not a round number picked freely — above
+  // ~1.42 the margin (176*scale) exceeds half the panel height (500px),
+  // which inverts the vertical clamp range entirely. Verified against that
+  // exact constraint, not just eyeballed.
+  magScale = Math.max(0.7, Math.min(1.4, magScale + delta));
+  clampMagPosition(); // re-clamp immediately so growing the lens can't push it off-panel
+  positionMagnifier();
 }
 
 function setMagnifier(on) {
@@ -1153,6 +1206,9 @@ document.getElementById("magBtn").addEventListener("click", () => {
   setMagnifier(!state.magnifierOn);
 });
 
+document.getElementById("magScaleDownBtn").addEventListener("click", () => setMagScale(-0.15));
+document.getElementById("magScaleUpBtn").addEventListener("click", () => setMagScale(0.15));
+
 (function setupMagnifierDrag() {
   const mag = document.getElementById("magnifier");
   mag.addEventListener("pointerdown", (e) => {
@@ -1163,8 +1219,9 @@ document.getElementById("magBtn").addEventListener("click", () => {
   mag.addEventListener("pointermove", (e) => {
     if (!magDragging) return;
     const p = toSvgPoint(e);
-    magX = Math.max(166, Math.min(724, p.x));
-    magY = Math.max(176, Math.min(329, p.y));
+    magX = p.x;
+    magY = p.y;
+    clampMagPosition();
     positionMagnifier();
   });
   mag.addEventListener("pointerup", (e) => {
