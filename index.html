@@ -812,12 +812,6 @@ function setGravityFlow(on) {
    MAGNIFIER — auxin particle physics
    ----------------------------------------------------------------------- */
 const TIP_RX = 110, TIP_RY = 56;
-// Separate, larger bounds for the active-state safety clamp — the
-// mesh's real edge points reach up to ~149x62 at full growth, which
-// TIP_RX/TIP_RY (sized for the old abstract-bias system) was too small
-// to contain. Verified these stay under a safe clamp-ratio and inside
-// the 156 lens radius once the edge inset is applied.
-const AUXIN_CLAMP_RX = 200, AUXIN_CLAMP_RY = 105;
 const MAG_PARTICLE_COUNT = 34;
 const MAG_TIP_THRESHOLD  = 198;
 const LEFT_X          = -134;  // left (cut) edge of the root body
@@ -1123,6 +1117,7 @@ function stepMagnifier(now) {
   const springK = 0.02;
   const EDGE_INSET = 0.82; // keeps auxin visibly inside the organ's own outer edge rather than sitting right on it
   const JITTER = 0.4; // kept constant regardless of spring state, so particles stay in slight motion even once settled at their target, rather than freezing
+  const MAX_DIST_FROM_TARGET = 7; // clamp relative to each particle's OWN target, not a fixed origin-centered ellipse — root's actual target geometry (~74px reach) is much tighter than shoot's (~149px), so a single shared absolute boundary was too loose to keep root's particles from crossing its own visible surface. Measured the real minimum target-to-boundary gap directly (10.28px for root) rather than estimating, and set this comfortably under it.
   let sumX = 0, sumY = 0;
   magParticles.forEach((p, idx) => {
     const edgeArr = isShootMatchForAuxin ? boostedEdgePts : nonBoostedEdgePts;
@@ -1135,12 +1130,35 @@ function stepMagnifier(now) {
     p.vy *= 0.88;
     p.x  += p.vx;
     p.y  += p.vy;
-    const nx = p.x / AUXIN_CLAMP_RX, ny = p.y / AUXIN_CLAMP_RY;
-    const d  = Math.hypot(nx, ny);
-    if (d > 0.98) {
-      const s = 0.98 / d;
-      p.x *= s; p.y *= s;
+    const dx = p.x - targetX, dy = p.y - targetY;
+    const distFromTarget = Math.hypot(dx, dy);
+    if (distFromTarget > MAX_DIST_FROM_TARGET) {
+      const s = MAX_DIST_FROM_TARGET / distFromTarget;
+      p.x = targetX + dx * s;
+      p.y = targetY + dy * s;
       p.vx *= -0.4; p.vy *= -0.4;
+    }
+    // Second, angle-aware safety layer: the boundary isn't a uniform
+    // circle, so a particle can be within range of its OWN target yet
+    // still sit past the boundary at whatever angle it's currently at
+    // (targets are spread across the curl zone, and the boundary's
+    // radius varies along it). Find the boundary distance at the
+    // particle's actual current angle and pull it in if needed.
+    if (edgeArr.length && (p.x || p.y)) {
+      const pAngle = Math.atan2(p.y, p.x);
+      let nearest = edgeArr[0], minAngDiff = Infinity;
+      for (let k = 0; k < edgeArr.length; k++) {
+        const eAngle = Math.atan2(edgeArr[k].y, edgeArr[k].x);
+        let diff = Math.abs(eAngle - pAngle);
+        if (diff > Math.PI) diff = 2 * Math.PI - diff;
+        if (diff < minAngDiff) { minAngDiff = diff; nearest = edgeArr[k]; }
+      }
+      const boundaryDist = Math.hypot(nearest.x, nearest.y) * EDGE_INSET;
+      const pDist = Math.hypot(p.x, p.y);
+      if (pDist > boundaryDist) {
+        const s = boundaryDist / pDist;
+        p.x *= s; p.y *= s;
+      }
     }
     p.el.setAttribute("cx", p.x.toFixed(1));
     p.el.setAttribute("cy", p.y.toFixed(1));
@@ -1275,10 +1293,14 @@ document.getElementById("resetBtn").addEventListener("click", (e) => {
   state.playing = false;
   if (playAnimId) cancelAnimationFrame(playAnimId);
   state.hours = 0;
+  state.tilted = false;
+  state.tiltDeg = 0;
   lockedOrganKey = null;
   magOrganMatch = null;
   magMatchedPoint = null;
   document.getElementById("magLeaderLine").setAttribute("opacity", "0");
+  document.getElementById("magLabelText").textContent = "";
+  setMagnifier(false); // stops the still-running loop that was immediately re-locking and bringing the line back
   render();
   const btn = e.currentTarget;
   btn.classList.remove("pulse");
