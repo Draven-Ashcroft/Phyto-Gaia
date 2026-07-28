@@ -86,6 +86,7 @@
   .narration-full p { font-size: 13px; color: rgba(255,255,255,0.9); line-height: 1.4; margin: 0; }
   .caption { font-size: 12px; color: rgba(255,255,255,0.4); line-height: 1.5; margin-top: 12px; }
   #magnifier { transition: opacity .3s ease; cursor: grab; touch-action: none; }
+  #magLeaderLine { transition: opacity .35s ease; }
   #magnifier.dragging { cursor: grabbing; }
   #magBioText { transition: opacity .35s ease; }
 </style>
@@ -150,10 +151,6 @@
         <filter id="softShadow" x="-50%" y="-50%" width="200%" height="200%">
           <feDropShadow dx="0" dy="2" stdDeviation="2.2" flood-color="#000" flood-opacity="0.4" />
         </filter>
-        <pattern id="cellPattern" width="14" height="10" patternUnits="userSpaceOnUse">
-          <rect width="14" height="10" fill="#ecdfb8"></rect>
-          <rect x="0.5" y="0.5" width="13" height="9" fill="none" stroke="rgba(110,90,55,0.4)" stroke-width="1"></rect>
-        </pattern>
         <radialGradient id="auxinGlow" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stop-color="#fffdf2"></stop>
           <stop offset="40%" stop-color="#ffcc33"></stop>
@@ -172,9 +169,6 @@
         <clipPath id="lensClip"><circle cx="0" cy="0" r="156"></circle></clipPath>
         <!-- Generous clip that contains the root body even at maximum cell growth — a safety net, not a tight fit -->
         <clipPath id="capBodyClip"><path id="capBodyClipPath" d=""></path></clipPath>
-        <marker id="magArrowHead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-          <path d="M 0 0 L 10 5 L 0 10 Z" fill="#f0c231"></path>
-        </marker>
         <filter id="lensShadow" x="-60%" y="-60%" width="220%" height="220%">
           <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity="0.5" />
         </filter>
@@ -205,8 +199,9 @@
       <text x="660" y="486" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.5)">(Experimental)</text>
       <g id="callouts"></g>
 
+      <line id="magLeaderLine" stroke="rgba(200,225,180,0.55)" stroke-width="1.6" stroke-dasharray="5 4" stroke-linecap="round" opacity="0"></line>
       <g id="magnifier" opacity="0" style="display:none;">
-        <line id="magHandle" x1="114" y1="114" x2="209" y2="209" stroke="#c9c9c9" stroke-width="11" stroke-linecap="round"></line>
+        <line x1="114" y1="114" x2="209" y2="209" stroke="#c9c9c9" stroke-width="11" stroke-linecap="round"></line>
         <line x1="114" y1="114" x2="209" y2="209" stroke="rgba(0,0,0,0.35)" stroke-width="11" stroke-linecap="round" transform="translate(0,2)"></line>
         <circle r="164" fill="url(#lensGlass)" filter="url(#lensShadow)"></circle>
         <g clip-path="url(#lensClip)">
@@ -217,11 +212,9 @@
                fall out of sync with the bend. -->
           <g id="magMeshOrient">
             <g id="magCellGrid" clip-path="url(#capBodyClip)"></g>
-            <path id="magArrow" d="" fill="none" stroke="#f0c231" stroke-width="3.5" stroke-linecap="round" marker-end="url(#magArrowHead)"></path>
             <ellipse id="magRedZone" cx="0" cy="0" rx="0" ry="0" fill="url(#auxinRedZone)"></ellipse>
             <g id="magParticles"></g>
           </g>
-          <rect id="magTint" x="-138" y="-64" width="272" height="128" fill="transparent" opacity="0"></rect>
         </g>
         <circle r="156" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="4"></circle>
         <circle r="156" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="1" transform="translate(1.2,1.2)"></circle>
@@ -287,7 +280,7 @@
         <path d="M12 8v5l3.5 2" stroke-linecap="round" stroke-linejoin="round"></path>
         <line x1="9.5" y1="2" x2="14.5" y2="2" stroke-linecap="round"></line>
       </svg>
-      <input type="range" id="hoursSlider" min="0" max="72" value="24" />
+      <input type="range" id="hoursSlider" min="0" max="250" value="24" />
       <span class="readout" id="hoursReadout">t = 24h</span>
     </div>
   </div>
@@ -333,16 +326,16 @@
       fall out of sync (see the DEFORMABLE, BENDING CELL MESH section)
    ======================================================================= */
 
-const SHOOT_TAU = 14;
-const ROOT_TAU  = 8;
-const SHOOT_RATE = 1.26;
-const ROOT_RATE  = 1.56;
+const SHOOT_TAU = 48.61;
+const ROOT_TAU  = 27.78;
+const SHOOT_RATE = 0.3629;
+const ROOT_RATE  = 0.4493;
 const SHOOT_PRETILT = 41;
 const ROOT_PRETILT  = 29;
 const TILT_ANGLE   = -45; // negative = tilts left
-const MAX_HOURS    = 72;
+const MAX_HOURS    = 250;
 const TILT_ANIM_MS = 1400;
-const LAG_H        = 0.75;  // [4] hours before correction starts
+const LAG_H        = 2.604;  // [4] hours before correction starts
 const PRE_STEPS    = 8;     // [3] subdivisions in rigid pre-tilt section
 
 // [5] Stable per-organ wobble seeds — deterministic, no per-frame randomness
@@ -682,7 +675,7 @@ function calloutsMarkup(shoot, root, tiltDeg, tilted, hours) {
 }
 
 // ---- state ----
-const state = { hours: 24, tilted: true, tiltDeg: TILT_ANGLE, playing: false, gravityOn: false, magnifierOn: false };
+const state = { hours: 24, tilted: false, tiltDeg: 0, playing: false, gravityOn: false, magnifierOn: false };
 let tiltAnimId = null;
 let playAnimId = null;
 const tipPositions = { leftShoot: null, leftRoot: null, rightShoot: null, rightRoot: null };
@@ -819,6 +812,12 @@ function setGravityFlow(on) {
    MAGNIFIER — auxin particle physics
    ----------------------------------------------------------------------- */
 const TIP_RX = 110, TIP_RY = 56;
+// Separate, larger bounds for the active-state safety clamp — the
+// mesh's real edge points reach up to ~149x62 at full growth, which
+// TIP_RX/TIP_RY (sized for the old abstract-bias system) was too small
+// to contain. Verified these stay under a safe clamp-ratio and inside
+// the 156 lens radius once the edge inset is applied.
+const AUXIN_CLAMP_RX = 200, AUXIN_CLAMP_RY = 105;
 const MAG_PARTICLE_COUNT = 34;
 const MAG_TIP_THRESHOLD  = 198;
 const LEFT_X          = -134;  // left (cut) edge of the root body
@@ -828,11 +827,10 @@ const RIGID_BOUNDARY_X = 33;   // elongation zone begins here (matches the old h
 // Generous safety-net clip — comfortably contains the mesh even at max bend
 // + max growth combined, so it never fights legitimate animation.
 const CLIP_OUTLINE_D = `M ${LEFT_X - 6} -186 L ${TIP_X + 35} -186 L ${TIP_X + 35} 90 L ${LEFT_X - 6} 90 Z`;
-const MAG_ARROW_D  = "M 19 -13 Q 51 -31 70 -3";
 
 
 let magX = 150, magY = 150;
-let magScale = 1;
+let magScale = 0.85;
 let magDragging = false;
 let magAnimId = null;
 let redZoneX = 0, redZoneY = 0;
@@ -855,7 +853,6 @@ function initMagParticles() {
       x: Math.cos(a) * TIP_RX * r,
       y: Math.sin(a) * TIP_RY * r,
       vx: 0, vy: 0,
-      biasFactor: 0.6 + Math.random() * 0.8,
       el,
     });
   }
@@ -871,33 +868,58 @@ function toSvgPoint(evt) {
 
 let magStimIntensity = 0;
 let magOrganMatch = null;
+let magMatchedPoint = null;
+let lockedOrganKey = null; // once locked onto an organ, stay on it as it moves — only drop the lock if the magnifier itself moves away
+let boostedEdgePts = []; // outer boundary of whichever side is currently elongating — used as the auxin target for shoots
+let nonBoostedEdgePts = []; // outer boundary of the opposite side — used as the auxin target for roots (auxin inhibits root elongation)
 
 function updateMagLabel() {
   const candidates = [
-    { key: "leftShoot",  name: "Shoot Tip", tint: "rgba(90,160,70,0.16)",  pot: "left"  },
-    { key: "leftRoot",   name: "Root Tip",  tint: "rgba(180,140,70,0.16)", pot: "left"  },
-    { key: "rightShoot", name: "Shoot Tip", tint: "rgba(90,160,70,0.16)",  pot: "right" },
-    { key: "rightRoot",  name: "Root Tip",  tint: "rgba(180,140,70,0.16)", pot: "right" },
+    { key: "leftShoot",  name: "Shoot Tip", pot: "left"  },
+    { key: "leftRoot",   name: "Root Tip",  pot: "left"  },
+    { key: "rightShoot", name: "Shoot Tip", pot: "right" },
+    { key: "rightRoot",  name: "Root Tip",  pot: "right" },
   ];
-  let best = null, bestDist = Infinity;
+  const labelEl = document.getElementById("magLabelText");
+
+  if (lockedOrganKey) {
+    const locked = candidates.find((c) => c.key === lockedOrganKey);
+    const p = locked && tipPositions[locked.key];
+    if (p) {
+      const d = Math.hypot(p.x - magX, p.y - magY);
+      if (d < MAG_TIP_THRESHOLD) {
+        labelEl.textContent = locked.name;
+        magOrganMatch = locked;
+        magMatchedPoint = p;
+        setStimIntensity(locked);
+        return;
+      }
+    }
+    lockedOrganKey = null; // locked organ moved out of range or vanished — fall through to re-search
+  }
+
+  let best = null, bestDist = Infinity, bestPoint = null;
   candidates.forEach((c) => {
     const p = tipPositions[c.key];
     if (!p) return;
     const d = Math.hypot(p.x - magX, p.y - magY);
-    if (d < bestDist) { bestDist = d; best = c; }
+    if (d < bestDist) { bestDist = d; best = c; bestPoint = p; }
   });
-  const labelEl = document.getElementById("magLabelText");
-  const tintEl  = document.getElementById("magTint");
   if (best && bestDist < MAG_TIP_THRESHOLD) {
     labelEl.textContent = best.name;
-    tintEl.setAttribute("fill", best.tint);
-    tintEl.setAttribute("opacity", "1");
     magOrganMatch = best;
+    magMatchedPoint = bestPoint;
+    lockedOrganKey = best.key;
   } else {
     labelEl.textContent = "Auxin View";
-    tintEl.setAttribute("opacity", "0");
     magOrganMatch = null;
+    magMatchedPoint = null;
+    lockedOrganKey = null;
   }
+  setStimIntensity(best);
+}
+
+function setStimIntensity(best) {
   const angle = best && best.pot === "right" ? Math.abs(state.tiltDeg) : 0;
   magStimIntensity = Math.min(1, angle / Math.abs(TILT_ANGLE));
 }
@@ -933,9 +955,15 @@ const N_ROWS     = N_UPPER + N_LOWER;
 const BASE_ROW_H = (HALF_H - 2) / N_UPPER;
 const MAX_CURL_DEG = 90;
 
-// Stable fill palette: upper (elongating) ↔ lower (inhibited), checker pattern
+// Two palettes, chosen per-frame based on which organ is matched (tan
+// for root, green for shoot). Which side reads as "elongating" differs
+// between them: root — upper elongates, lower inhibited; shoot — lower
+// elongates, upper inhibited (auxin stimulates shoot growth instead of
+// inhibiting it). Both are checker patterns.
 const FILL_UPPER = ["#ede0bd", "#e3d3a9"];
 const FILL_LOWER = ["#d4c08a", "#c9b47e"];
+const FILL_UPPER_SHOOT = ["#c9e3ad", "#bcd89a"];
+const FILL_LOWER_SHOOT = ["#9bc57a", "#8fb96c"];
 
 let CELL_PATHS = [];
 
@@ -948,12 +976,11 @@ function initCellGrid() {
   const nCols = RIGID_STEPS + CURL_STEPS;
   for (let r = 0; r < N_ROWS; r++) {
     for (let c = 0; c < nCols; c++) {
-      const el = document.createElementNS(NS, "path");
+      const el = document.createElementNS(NS, "rect");
       const isUpper = r < N_UPPER;
       el.setAttribute("fill", isUpper ? FILL_UPPER[c % 2] : FILL_LOWER[c % 2]);
-      el.setAttribute("stroke", "rgba(100,78,42,0.42)");
-      el.setAttribute("stroke-width", "0.75");
-      el.setAttribute("stroke-linejoin", "round");
+      el.setAttribute("stroke", "rgba(100,78,42,0.5)");
+      el.setAttribute("stroke-width", "0.6");
       g.appendChild(el);
       CELL_PATHS.push({ el, col: c, row: r });
     }
@@ -1013,10 +1040,27 @@ function updateCellGrid(stim, curlAngle, boostLower) {
     }
   }
 
+  // Outer edge of both sides, from the curl/growth zone onward (skipping
+  // the still-rigid base). Roots and shoots need different auxin targets:
+  // shoots concentrate auxin on the boosted/elongating side (auxin
+  // stimulates), roots concentrate it on the opposite side (auxin
+  // inhibits, so the low-auxin side is the one that elongates) — so both
+  // arrays are captured here rather than just the boosted one.
+  boostedEdgePts = [];
+  nonBoostedEdgePts = [];
+  for (let i = RIGID_STEPS; i < M; i++) {
+    boostedEdgePts.push(boostLower ? lowerB[N_LOWER][i] : upperB[N_UPPER][i]);
+    nonBoostedEdgePts.push(boostLower ? upperB[N_UPPER][i] : lowerB[N_LOWER][i]);
+  }
+
   // 3. Each cell quad is built from shared boundary points — adjacent
   //    cells reference the identical {x,y} values at their common edge,
   //    so there is no floating-point way for a gap to appear.
   CELL_PATHS.forEach(({ el, row, col }) => {
+    const isUpper = row < N_UPPER;
+    const palette = boostLower ? (isUpper ? FILL_UPPER_SHOOT : FILL_LOWER_SHOOT) : (isUpper ? FILL_UPPER : FILL_LOWER);
+    el.setAttribute("fill", palette[col % 2]);
+    el.setAttribute("stroke", boostLower ? "rgba(50,80,35,0.5)" : "rgba(100,78,42,0.5)");
     let p1, p2, p3, p4;
     if (row < N_UPPER) {
       const k = N_UPPER - row, kIn = k - 1;
@@ -1027,33 +1071,76 @@ function updateCellGrid(stim, curlAngle, boostLower) {
       p1 = lowerB[r][col];       p2 = lowerB[r][col + 1];
       p3 = lowerB[r + 1][col + 1]; p4 = lowerB[r + 1][col];
     }
-    el.setAttribute("d",
-      `M${p1.x.toFixed(2)},${p1.y.toFixed(2)}` +
-      `L${p2.x.toFixed(2)},${p2.y.toFixed(2)}` +
-      `L${p3.x.toFixed(2)},${p3.y.toFixed(2)}` +
-      `L${p4.x.toFixed(2)},${p4.y.toFixed(2)}Z`
-    );
+    // Rounded rect centered on the quad's centroid, sized/oriented from
+    // the same corner points — biologically closer to real plant cells
+    // than sharp-cornered quads. Same technique used on the hydrotropism
+    // and phototropism sims.
+    const cx = (p1.x + p2.x + p3.x + p4.x) / 4, cy = (p1.y + p2.y + p3.y + p4.y) / 4;
+    const wx = p2.x - p1.x, wy = p2.y - p1.y;
+    const hx = p4.x - p1.x, hy = p4.y - p1.y;
+    const width = Math.hypot(wx, wy), height = Math.hypot(hx, hy);
+    const angleDeg = (Math.atan2(wy, wx) * 180) / Math.PI;
+    const shrink = 0.86;
+    const rectW = width * shrink, rectH = height * shrink;
+    const corner = Math.min(rectW, rectH) * 0.28;
+    el.setAttribute("x", (-rectW / 2).toFixed(2));
+    el.setAttribute("y", (-rectH / 2).toFixed(2));
+    el.setAttribute("width", rectW.toFixed(2));
+    el.setAttribute("height", rectH.toFixed(2));
+    el.setAttribute("rx", corner.toFixed(2));
+    el.setAttribute("ry", corner.toFixed(2));
+    el.setAttribute("transform", `translate(${cx.toFixed(2)} ${cy.toFixed(2)}) rotate(${angleDeg.toFixed(1)})`);
   });
 }
 
 function stepMagnifier(now) {
   updateMagLabel();
-  const bias    = 0.11 * magStimIntensity;
-  const springK = 0.0035 + 0.007 * (1 - magStimIntensity);
+  const isShootMatchForAuxin = magOrganMatch && magOrganMatch.name === "Shoot Tip";
+
+  const leaderEl = document.getElementById("magLeaderLine");
+  if (magOrganMatch && magMatchedPoint) {
+    leaderEl.setAttribute("x1", magX.toFixed(1));
+    leaderEl.setAttribute("y1", magY.toFixed(1));
+    leaderEl.setAttribute("x2", magMatchedPoint.x.toFixed(1));
+    leaderEl.setAttribute("y2", magMatchedPoint.y.toFixed(1));
+    leaderEl.setAttribute("opacity", "1");
+  } else {
+    leaderEl.setAttribute("opacity", "0");
+  }
+
+  // Auxin particles now target the ACTUAL outer edge of whichever cells
+  // are currently elongating (boostedEdgePts, captured fresh from the
+  // mesh above) rather than drifting toward an abstract bias direction —
+  // the concentration should visibly land ON specific cells, not just
+  // shift a vague cloud sideways. Because the target IS the boosted
+  // cell's own edge, it naturally lands on the correct side for both
+  // organs without needing a separate direction rule: opposite the
+  // boosted/upper side for roots (auxin inhibits), and on the boosted
+  // side for shoots, which after the horizontal flip + rotation reads
+  // as the left side in the stem, matching what was explicitly asked
+  // for. Below the stim threshold, targets scale toward zero and
+  // particles simply re-center.
+  const springK = 0.02;
+  const EDGE_INSET = 0.82; // keeps auxin visibly inside the organ's own outer edge rather than sitting right on it
+  const JITTER = 0.4; // kept constant regardless of spring state, so particles stay in slight motion even once settled at their target, rather than freezing
   let sumX = 0, sumY = 0;
-  magParticles.forEach((p) => {
-    p.vx += (Math.random() - 0.5) * 0.55 - p.x * springK;
-    p.vy += (Math.random() - 0.5) * 0.55 - p.y * springK + bias * p.biasFactor;
+  magParticles.forEach((p, idx) => {
+    const edgeArr = isShootMatchForAuxin ? boostedEdgePts : nonBoostedEdgePts;
+    const edge = edgeArr.length ? edgeArr[idx % edgeArr.length] : { x: 0, y: 0 };
+    const targetX = edge.x * magStimIntensity * EDGE_INSET;
+    const targetY = edge.y * magStimIntensity * EDGE_INSET;
+    p.vx += (Math.random() - 0.5) * JITTER + (targetX - p.x) * springK;
+    p.vy += (Math.random() - 0.5) * JITTER + (targetY - p.y) * springK;
     p.vx *= 0.88;
     p.vy *= 0.88;
     p.x  += p.vx;
     p.y  += p.vy;
-    const nx = p.x / TIP_RX, ny = p.y / TIP_RY;
+    const nx = p.x / AUXIN_CLAMP_RX, ny = p.y / AUXIN_CLAMP_RY;
     const d  = Math.hypot(nx, ny);
-    if (d > 0.96) {
-      const s = 0.96 / d;
+    if (d > 0.98) {
+      const s = 0.98 / d;
       p.x *= s; p.y *= s;
-      p.vx *= -0.55; p.vy *= -0.55;
+      p.vx *= -0.4; p.vy *= -0.4;
     }
     p.el.setAttribute("cx", p.x.toFixed(1));
     p.el.setAttribute("cy", p.y.toFixed(1));
@@ -1088,10 +1175,11 @@ function stepMagnifier(now) {
 
   // Shoots grow upward in the main scene; rotate the mesh view to match,
   // rather than showing the same rightward-pointing convention used for
-  // roots. Only the display orientation changes — growth math, curl
-  // direction, and the auxin story underneath are untouched.
+  // roots. A horizontal flip is applied on top of that for both organs,
+  // per direct request. Only the display orientation changes — growth
+  // math, curl direction, and the auxin story underneath are untouched.
   const isShootView = magOrganMatch && magOrganMatch.name === "Shoot Tip";
-  document.getElementById("magMeshOrient").setAttribute("transform", isShootView ? "rotate(-90)" : "");
+  document.getElementById("magMeshOrient").setAttribute("transform", "scale(-1,1) " + (isShootView ? "rotate(-90)" : ""));
 
   const bioEl = document.getElementById("magBioText");
   if (magOrganMatch && magOrganMatch.pot === "right" && magStimIntensity > 0.12) {
@@ -1102,9 +1190,6 @@ function stepMagnifier(now) {
   } else {
     bioEl.setAttribute("opacity", "0");
   }
-
-  const arrowOp = 0.55 + Math.sin(now / 550) * 0.2;
-  document.getElementById("magArrow").setAttribute("stroke-opacity", arrowOp.toFixed(2));
 
   if (state.magnifierOn) magAnimId = requestAnimationFrame(stepMagnifier);
 }
@@ -1190,6 +1275,10 @@ document.getElementById("resetBtn").addEventListener("click", (e) => {
   state.playing = false;
   if (playAnimId) cancelAnimationFrame(playAnimId);
   state.hours = 0;
+  lockedOrganKey = null;
+  magOrganMatch = null;
+  magMatchedPoint = null;
+  document.getElementById("magLeaderLine").setAttribute("opacity", "0");
   render();
   const btn = e.currentTarget;
   btn.classList.remove("pulse");
@@ -1248,7 +1337,6 @@ document.getElementById("leftPot").setAttribute("transform", `rotate(0 ${leftX} 
 document.getElementById("rightPot").innerHTML = potInnerSVG(rightX);
 document.getElementById("rightPot").setAttribute("transform", `rotate(${state.tiltDeg} ${rightX} ${groundY - potH / 2})`);
 document.getElementById("capBodyClipPath").setAttribute("d", CLIP_OUTLINE_D);
-document.getElementById("magArrow").setAttribute("d", MAG_ARROW_D);
 initMagParticles();
 initCellGrid();
 positionMagnifier();
