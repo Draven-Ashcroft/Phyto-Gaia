@@ -84,7 +84,29 @@
     display: none;
   }
   .narration-full p { font-size: 13px; color: rgba(255,255,255,0.9); line-height: 1.4; margin: 0; }
-  .caption { font-size: 12px; color: rgba(255,255,255,0.4); line-height: 1.5; margin-top: 12px; }
+  .mechanism-toggle {
+    width: 100%; height: auto; border-radius: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 12px; padding: 12px 14px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: #131519; color: rgba(255,255,255,0.85);
+    font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
+    transition: background .15s;
+  }
+  .mechanism-toggle:hover { background: rgba(255,255,255,0.06); }
+  .mechanism-toggle .mechanism-arrow { transition: transform .35s ease; }
+  .mechanism-toggle[aria-expanded="true"] .mechanism-arrow { transform: rotate(180deg); }
+  .mechanism-panel { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .35s ease; }
+  .mechanism-panel.expanded { grid-template-rows: 1fr; }
+  .mechanism-panel-inner { overflow: hidden; min-height: 0; }
+  .mechanism-panel-inner p {
+    margin: 0; padding-top: 10px; font-size: 12px; color: rgba(255,255,255,0.5); line-height: 1.5;
+    opacity: 0; transition: opacity .3s ease;
+  }
+  .mechanism-panel.expanded .mechanism-panel-inner p { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .mechanism-panel, .mechanism-toggle .mechanism-arrow, .mechanism-panel-inner p { transition: none; }
+  }
   #magnifier { transition: opacity .3s ease; cursor: grab; touch-action: none; }
   #magLeaderLine { transition: opacity .35s ease; }
   #magnifier.dragging { cursor: grabbing; }
@@ -235,22 +257,17 @@
         <circle cx="12" cy="15" r="1.1" fill="currentColor" stroke="none"></circle>
       </svg>
     </button>
-    <button id="playBtn" title="Play">
-      <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor" stroke="none">
-        <path d="M8 5.5v13l11-6.5z"></path>
+    <button id="gravityBtn" title="Simulate Gravity">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="4" x2="12" y2="14" stroke-linecap="round"></line>
+        <path d="M7.5 10.5 12 15l4.5-4.5" stroke-linecap="round" stroke-linejoin="round"></path>
+        <line x1="8" y1="19.5" x2="16" y2="19.5" stroke-linecap="round" opacity="0.45"></line>
       </svg>
     </button>
     <button id="resetBtn" title="Reset to t = 0h">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3" stroke-linecap="round"></path>
         <path d="M19.5 4.5v5h-5" stroke-linecap="round" stroke-linejoin="round"></path>
-      </svg>
-    </button>
-    <button id="gravityBtn" title="Simulate Gravity">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="12" y1="4" x2="12" y2="14" stroke-linecap="round"></line>
-        <path d="M7.5 10.5 12 15l4.5-4.5" stroke-linecap="round" stroke-linejoin="round"></path>
-        <line x1="8" y1="19.5" x2="16" y2="19.5" stroke-linecap="round" opacity="0.45"></line>
       </svg>
     </button>
     <button id="magBtn" title="Show Magnifier">
@@ -299,11 +316,21 @@
     </div>
   </div>
 
-  <p class="caption">
-    Muted color = growth that already existed when the pot was tilted (rigid, doesn't re-bend). Bright color =
-    growth added since then, which steers back toward vertical over time — faster in the root than the shoot
-    in this model. Bending is concentrated near the tip, in the elongation zone, as it is in real plants.
-  </p>
+  <button class="mechanism-toggle" id="mechanismToggle" aria-expanded="false" aria-controls="mechanismPanel">
+    <span>Mechanism</span>
+    <svg class="mini-icon mechanism-arrow" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2">
+      <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+  </button>
+  <div class="mechanism-panel" id="mechanismPanel" role="region" aria-labelledby="mechanismToggle">
+    <div class="mechanism-panel-inner">
+      <p>
+        Muted color = growth that already existed when the pot was tilted (rigid, doesn't re-bend). Bright color =
+        growth added since then, which steers back toward vertical over time — faster in the root than the shoot
+        in this model. Bending is concentrated near the tip, in the elongation zone, as it is in real plants.
+      </p>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -675,9 +702,9 @@ function calloutsMarkup(shoot, root, tiltDeg, tilted, hours) {
 }
 
 // ---- state ----
-const state = { hours: 24, tilted: false, tiltDeg: 0, playing: false, gravityOn: false, magnifierOn: false };
+const state = { hours: 24, tilted: false, tiltDeg: 0, gravityOn: false, magnifierOn: false };
 let tiltAnimId = null;
-let playAnimId = null;
+let hoursAnimId = null; // drives the hours auto-sweep, started/stopped by the Gravity toggle
 const tipPositions = { leftShoot: null, leftRoot: null, rightShoot: null, rightRoot: null };
 
 function computeRightOrigin(tiltDeg) {
@@ -743,10 +770,6 @@ function render() {
   const tiltBtn = document.getElementById("tiltBtn");
   tiltBtn.classList.toggle("active", tilted);
   tiltBtn.title = tilted ? "Tilted 45\u00b0 left \u2014 tap to stand upright" : "Upright \u2014 tap to tilt left 45\u00b0";
-  document.getElementById("playIcon").innerHTML = state.playing
-    ? '<rect x="6.5" y="5.5" width="4" height="13" rx="1"></rect><rect x="13.5" y="5.5" width="4" height="13" rx="1"></rect>'
-    : '<path d="M8 5.5v13l11-6.5z"></path>';
-  document.getElementById("playBtn").title = state.playing ? "Pause" : "Play";
 }
 
 function animateTilt(target) {
@@ -792,6 +815,21 @@ function gravityJerk() {
   requestAnimationFrame(step);
 }
 
+function startHoursSweep() {
+  if (hoursAnimId) cancelAnimationFrame(hoursAnimId);
+  const startHours = state.hours;
+  const remaining  = Math.max(0, MAX_HOURS - startHours);
+  const duration   = 22000 * (remaining / MAX_HOURS) || 200;
+  const startTime  = performance.now();
+  function step(now) {
+    const p = Math.min(1, (now - startTime) / duration);
+    state.hours = startHours + remaining * p;
+    render();
+    if (p < 1 && state.gravityOn) hoursAnimId = requestAnimationFrame(step);
+  }
+  hoursAnimId = requestAnimationFrame(step);
+}
+
 function setGravityFlow(on) {
   state.gravityOn = on;
   document.getElementById("gravityBtn").classList.toggle("active", on);
@@ -801,10 +839,12 @@ function setGravityFlow(on) {
     gravityStartTime = null;
     if (gravityFlowId) cancelAnimationFrame(gravityFlowId);
     gravityFlowId = requestAnimationFrame(stepGravityFlow);
+    startHoursSweep(); // Gravity now also drives the hours timeline, taking over what Play used to do
   } else {
     if (gravityFlowId) cancelAnimationFrame(gravityFlowId);
     document.getElementById("gravityFxLeft").innerHTML  = "";
     document.getElementById("gravityFxRight").innerHTML = "";
+    if (hoursAnimId) cancelAnimationFrame(hoursAnimId); // stop the sweep in place, same as Play's old pause behavior
   }
 }
 
@@ -866,6 +906,8 @@ let magMatchedPoint = null;
 let lockedOrganKey = null; // once locked onto an organ, stay on it as it moves — only drop the lock if the magnifier itself moves away
 let boostedEdgePts = []; // outer boundary of whichever side is currently elongating — used as the auxin target for shoots
 let nonBoostedEdgePts = []; // outer boundary of the opposite side — used as the auxin target for roots (auxin inhibits root elongation)
+let smoothedStim = 0; // real-time-eased auxin response shown in the magnifier — see stepMagnifier for why this is needed on top of the hours-based ceiling
+let magLastFrameTime = null; // wall-clock timestamp of the previous magnifier frame, used to compute dt for that easing regardless of display frame rate
 
 function updateMagLabel() {
   const candidates = [
@@ -1089,6 +1131,32 @@ function updateCellGrid(stim, curlAngle, boostLower) {
 
 function stepMagnifier(now) {
   updateMagLabel();
+
+  /* magStimIntensity (set above) only reflects how far the POT has
+     physically tilted, which finishes in TILT_ANIM_MS = 1.4s — that's
+     the mechanical trigger, not the biological response. The previous
+     fix (magStimIntensity × timeFactor) only rescaled the CEILING of
+     the response by elapsed plant-hours; it did not slow the RATE at
+     which the visuals approach that ceiling, which was still bounded by
+     the 1.4s pot swing (since state.hours is static while you're not
+     scrubbing/playing) — so auxin still visibly snapped into place.
+     Fixed properly here: ceiling is computed exactly as before, but the
+     particles/red-zone/cell-curl/callout now chase that ceiling through
+     an explicit real-time low-pass filter (STIM_SMOOTH_TAU, in actual
+     seconds via requestAnimationFrame's own timestamp), so the visible
+     movement is slow no matter how fast the pot itself tilts or the
+     hours are scrubbed. */
+  const AUXIN_VISUAL_TAU = ROOT_TAU * 1.3;
+  const timeFactor = 1 - Math.exp(-Math.max(0, state.hours - LAG_H) / AUXIN_VISUAL_TAU);
+  const stimCeiling = magStimIntensity * timeFactor;
+
+  const STIM_SMOOTH_TAU = 3.2; // real seconds — deliberately slow ("very slowly") independent of tilt/hours speed
+  if (magLastFrameTime === null) magLastFrameTime = now;
+  const dt = Math.min(0.1, Math.max(0, (now - magLastFrameTime) / 1000)); // clamp guards against huge jumps (tab backgrounded, first frame)
+  magLastFrameTime = now;
+  const smoothAlpha = 1 - Math.exp(-dt / STIM_SMOOTH_TAU);
+  smoothedStim += (stimCeiling - smoothedStim) * smoothAlpha;
+  const effectiveStim = smoothedStim;
   const isShootMatchForAuxin = magOrganMatch && magOrganMatch.name === "Shoot Tip";
 
   const leaderEl = document.getElementById("magLeaderLine");
@@ -1122,8 +1190,8 @@ function stepMagnifier(now) {
   magParticles.forEach((p, idx) => {
     const edgeArr = isShootMatchForAuxin ? boostedEdgePts : nonBoostedEdgePts;
     const edge = edgeArr.length ? edgeArr[idx % edgeArr.length] : { x: 0, y: 0 };
-    const targetX = edge.x * magStimIntensity * EDGE_INSET;
-    const targetY = edge.y * magStimIntensity * EDGE_INSET;
+    const targetX = edge.x * effectiveStim * EDGE_INSET;
+    const targetY = edge.y * effectiveStim * EDGE_INSET;
     p.vx += (Math.random() - 0.5) * JITTER + (targetX - p.x) * springK;
     p.vy += (Math.random() - 0.5) * JITTER + (targetY - p.y) * springK;
     p.vx *= 0.88;
@@ -1168,27 +1236,22 @@ function stepMagnifier(now) {
   redZoneX += (sumX / magParticles.length - redZoneX) * 0.06;
   redZoneY += (sumY / magParticles.length - redZoneY) * 0.06;
   const zoneEl   = document.getElementById("magRedZone");
-  const zoneSize = 14 + 36 * magStimIntensity;
+  const zoneSize = 14 + 36 * effectiveStim;
   zoneEl.setAttribute("cx", redZoneX.toFixed(1));
   zoneEl.setAttribute("cy", redZoneY.toFixed(1));
   zoneEl.setAttribute("rx", zoneSize.toFixed(1));
   zoneEl.setAttribute("ry", (zoneSize * 0.62).toFixed(1));
-  zoneEl.setAttribute("opacity", Math.min(1, magStimIntensity * 1.3).toFixed(2));
-
-  /* [9] Time factor = same exponential model as the main simulation, so the
-         magnifier and the plant agree at every t. Drives how much of the
-         cell mesh's growth ramp — and bend — is "switched on" right now. */
-  const timeFactor = 1 - Math.exp(-Math.max(0, state.hours - LAG_H) / ROOT_TAU);
+  zoneEl.setAttribute("opacity", Math.min(1, effectiveStim * 1.3).toFixed(2));
 
   // Deform the pre-allocated, bending cell mesh — zero stim on the control
   // pot so it stays straight and symmetric when untilted.
   const isShootMatch = magOrganMatch && magOrganMatch.name === "Shoot Tip";
   const cellStim = (magOrganMatch && magOrganMatch.pot === "right")
-    ? magStimIntensity * timeFactor
+    ? effectiveStim
     : 0;
   let curlDir = 0;
   if (magOrganMatch && magOrganMatch.pot === "right") curlDir = isShootMatch ? -1 : 1;
-  const curlAngle = curlDir * MAX_CURL_DEG * magStimIntensity * timeFactor;
+  const curlAngle = curlDir * MAX_CURL_DEG * effectiveStim;
   updateCellGrid(cellStim, curlAngle, isShootMatch);
 
   // Shoots grow upward in the main scene; rotate the mesh view to match,
@@ -1200,11 +1263,11 @@ function stepMagnifier(now) {
   document.getElementById("magMeshOrient").setAttribute("transform", "scale(-1,1) " + (isShootView ? "rotate(-90)" : ""));
 
   const bioEl = document.getElementById("magBioText");
-  if (magOrganMatch && magOrganMatch.pot === "right" && magStimIntensity > 0.12) {
+  if (magOrganMatch && magOrganMatch.pot === "right" && effectiveStim > 0.12) {
     bioEl.textContent = magOrganMatch.name === "Root Tip"
       ? "High auxin \u2192 inhibits root elongation"
       : "High auxin \u2192 stimulates shoot elongation";
-    bioEl.setAttribute("opacity", Math.min(1, (magStimIntensity - 0.12) * 2).toFixed(2));
+    bioEl.setAttribute("opacity", Math.min(1, (effectiveStim - 0.12) * 2).toFixed(2));
   } else {
     bioEl.setAttribute("opacity", "0");
   }
@@ -1252,27 +1315,16 @@ function setMagnifier(on) {
     mag.setAttribute("opacity", "0");
     if (magAnimId) cancelAnimationFrame(magAnimId);
     setTimeout(() => { if (!state.magnifierOn) mag.style.display = "none"; }, 300);
+    // Same fix as Reset needed earlier: the leader line/lock only ever get
+    // cleared by the stepMagnifier loop itself, which just stopped — so
+    // without this, closing the magnifier leaves the dotted line stuck at
+    // its last-drawn position/opacity instead of disappearing with it.
+    lockedOrganKey = null;
+    magOrganMatch = null;
+    magMatchedPoint = null;
+    document.getElementById("magLeaderLine").setAttribute("opacity", "0");
+    document.getElementById("magLabelText").textContent = "";
   }
-}
-
-function startPlay() {
-  if (playAnimId) cancelAnimationFrame(playAnimId);
-  const startHours = state.hours;
-  const remaining  = Math.max(0, MAX_HOURS - startHours);
-  const duration   = 22000 * (remaining / MAX_HOURS) || 200;
-  const startTime  = performance.now();
-  function step(now) {
-    const p = Math.min(1, (now - startTime) / duration);
-    state.hours = startHours + remaining * p;
-    if (p < 1 && state.playing) {
-      render();
-      playAnimId = requestAnimationFrame(step);
-    } else {
-      state.playing = false;
-      render();
-    }
-  }
-  playAnimId = requestAnimationFrame(step);
 }
 
 document.getElementById("tiltBtn").addEventListener("click", () => {
@@ -1280,27 +1332,14 @@ document.getElementById("tiltBtn").addEventListener("click", () => {
   animateTilt(state.tilted ? TILT_ANGLE : 0);
 });
 
-document.getElementById("playBtn").addEventListener("click", () => {
-  state.playing = !state.playing;
-  if (state.playing) startPlay();
-  else {
-    if (playAnimId) cancelAnimationFrame(playAnimId);
-    render();
-  }
-});
-
 document.getElementById("resetBtn").addEventListener("click", (e) => {
-  state.playing = false;
-  if (playAnimId) cancelAnimationFrame(playAnimId);
+  if (hoursAnimId) cancelAnimationFrame(hoursAnimId);
   state.hours = 0;
   state.tilted = false;
   state.tiltDeg = 0;
-  lockedOrganKey = null;
-  magOrganMatch = null;
-  magMatchedPoint = null;
-  document.getElementById("magLeaderLine").setAttribute("opacity", "0");
-  document.getElementById("magLabelText").textContent = "";
-  setMagnifier(false); // stops the still-running loop that was immediately re-locking and bringing the line back
+  smoothedStim = 0;
+  magLastFrameTime = null;
+  setMagnifier(false); // also clears the lock state and dotted leader line
   render();
   const btn = e.currentTarget;
   btn.classList.remove("pulse");
@@ -1347,10 +1386,16 @@ document.getElementById("magScaleUpBtn").addEventListener("click", () => setMagS
 })();
 
 document.getElementById("hoursSlider").addEventListener("input", (e) => {
-  state.playing = false;
-  if (playAnimId) cancelAnimationFrame(playAnimId);
+  if (hoursAnimId) cancelAnimationFrame(hoursAnimId);
   state.hours = Number(e.target.value);
   render();
+});
+
+document.getElementById("mechanismToggle").addEventListener("click", (e) => {
+  const btn = e.currentTarget;
+  const expanded = btn.getAttribute("aria-expanded") === "true";
+  btn.setAttribute("aria-expanded", String(!expanded));
+  document.getElementById("mechanismPanel").classList.toggle("expanded", !expanded);
 });
 
 // ---- init ----
